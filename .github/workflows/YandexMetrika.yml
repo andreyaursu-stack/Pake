@@ -1,0 +1,62 @@
+name: Build Pake App (Windows MSI)
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_url:
+        description: 'URL веб-приложения для упаковки'
+        required: true
+        default: 'https://metrika.yandex.ru/list/'
+      app_name:
+        description: 'Название приложения (латиницей)'
+        required: true
+        default: 'YandexMetrika'
+      window_width:
+        description: 'Ширина окна'
+        required: false
+        default: '1280'
+      window_height:
+        description: 'Высота окна'
+        required: false
+        default: '800'
+      fullscreen:
+        description: 'Запускать в полноэкранном режиме'
+        type: boolean
+        default: false
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: x86_64-pc-windows-msvc
+          override: true
+
+      - name: Install Pake CLI
+        run: npm install -g pake-cli
+
+      - name: Build Application
+        run: |
+          mkdir output
+          pake ${{ github.event.inputs.app_url }} `
+            --name ${{ github.event.inputs.app_name }} `
+            --width ${{ github.event.inputs.window_width }} `
+            --height ${{ github.event.inputs.window_height }} `
+            ${{ github.event.inputs.fullscreen == 'true' && '--fullscreen' || '' }}
+
+      - name: Upload MSI Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.inputs.app_name }}-windows-msi
+          path: ./${{ github.event.inputs.app_name }}_*.msi
