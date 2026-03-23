@@ -27,6 +27,9 @@ on:
 jobs:
   build-windows:
     runs-on: windows-latest
+    # Опционально: настройка для принудительного использования Node.js 24 уже сейчас
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -34,14 +37,14 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22' # Используем LTS версию, совместимую со всеми действиями
 
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          target: x86_64-pc-windows-msvc
-          override: true
+        run: |
+          rustup set profile minimal
+          rustup target add x86_64-pc-windows-msvc
+          rustup component add rust-src
+        shell: pwsh
 
       - name: Install Pake CLI
         run: npm install -g pake-cli
@@ -54,6 +57,7 @@ jobs:
             --width ${{ github.event.inputs.window_width }} `
             --height ${{ github.event.inputs.window_height }} `
             ${{ github.event.inputs.fullscreen == 'true' && '--fullscreen' || '' }}
+        shell: pwsh
 
       - name: Upload MSI Artifact
         uses: actions/upload-artifact@v4
