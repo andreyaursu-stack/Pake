@@ -8,15 +8,15 @@ on:
         required: true
         default: 'https://metrika.yandex.ru/list/'
       app_name:
-        description: 'Название приложения (латиницей)'
+        description: 'Название приложения (латиницей, без пробелов)'
         required: true
         default: 'YandexMetrika'
       window_width:
-        description: 'Ширина окна'
+        description: 'Ширина окна (по умолчанию 1280)'
         required: false
         default: '1280'
       window_height:
-        description: 'Высота окна'
+        description: 'Высота окна (по умолчанию 800)'
         required: false
         default: '800'
       fullscreen:
@@ -27,9 +27,7 @@ on:
 jobs:
   build-windows:
     runs-on: windows-latest
-    # Опционально: настройка для принудительного использования Node.js 24 уже сейчас
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -37,9 +35,9 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22' # Используем LTS версию, совместимую со всеми действиями
+          node-version: '20'
 
-      - name: Install Rust toolchain
+      - name: Install Rust
         run: |
           rustup set profile minimal
           rustup target add x86_64-pc-windows-msvc
@@ -48,19 +46,36 @@ jobs:
 
       - name: Install Pake CLI
         run: npm install -g pake-cli
+        shell: pwsh
 
-      - name: Build Application
+      - name: Build application
         run: |
-          mkdir output
-          pake ${{ github.event.inputs.app_url }} `
-            --name ${{ github.event.inputs.app_name }} `
-            --width ${{ github.event.inputs.window_width }} `
-            --height ${{ github.event.inputs.window_height }} `
-            ${{ github.event.inputs.fullscreen == 'true' && '--fullscreen' || '' }}
+          $args = @(
+            "${{ github.event.inputs.app_url }}",
+            "--name", "${{ github.event.inputs.app_name }}",
+            "--width", "${{ github.event.inputs.window_width }}",
+            "--height", "${{ github.event.inputs.window_height }}"
+          )
+          if ("${{ github.event.inputs.fullscreen }}" -eq "true") {
+            $args += "--fullscreen"
+          }
+          pake @args
+        shell: pwsh
+
+      - name: Debug - Find all MSI files
+        run: |
+          Write-Host "=== Searching for MSI files ==="
+          Get-ChildItem -Path . -Filter "*.msi" -Recurse | ForEach-Object {
+            Write-Host "Found MSI: $($_.FullName)"
+          }
+          Write-Host "=== Current directory contents ==="
+          Get-ChildItem -Path . -Recurse | Select-Object FullName, Length | Format-Table -AutoSize
         shell: pwsh
 
       - name: Upload MSI Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.event.inputs.app_name }}-windows-msi
-          path: ./${{ github.event.inputs.app_name }}_*.msi
+          path: |
+            ./**/*.msi
+            ./${{ github.event.inputs.app_name }}_*.msi
