@@ -1,0 +1,87 @@
+name: Build Pake App (Windows MSI)
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_url:
+        description: 'URL веб-приложения для упаковки'
+        required: true
+        default: 'https://metrika.yandex.ru/list/'
+      app_name:
+        description: 'Название приложения (латиницей, без пробелов)'
+        required: true
+        default: 'YandexMetrika'
+      window_width:
+        description: 'Ширина окна (по умолчанию 1280)'
+        required: false
+        default: '1280'
+      window_height:
+        description: 'Высота окна (по умолчанию 800)'
+        required: false
+        default: '800'
+      fullscreen:
+        description: 'Запускать в полноэкранном режиме'
+        type: boolean
+        default: false
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Rust
+        run: |
+          rustup set profile minimal
+          rustup target add x86_64-pc-windows-msvc
+          rustup component add rust-src
+        shell: pwsh
+
+      - name: Install Pake CLI
+        run: npm install -g pake-cli
+        shell: pwsh
+
+      - name: Create output directory
+        run: New-Item -ItemType Directory -Force -Path ./output
+        shell: pwsh
+
+      - name: Build application
+        run: |
+          $params = @(
+            "${{ github.event.inputs.app_url }}",
+            "--name", "${{ github.event.inputs.app_name }}",
+            "--width", "${{ github.event.inputs.window_width }}",
+            "--height", "${{ github.event.inputs.window_height }}"
+          )
+          if ("${{ github.event.inputs.fullscreen }}" -eq "true") {
+            $params += "--fullscreen"
+          }
+          pake @params
+        shell: pwsh
+
+      - name: Find and upload MSI
+        run: |
+          $msiFile = Get-ChildItem -Path . -Filter "${{ github.event.inputs.app_name }}_*.msi" -Recurse | Select-Object -First 1
+          if ($msiFile) {
+            Write-Host "Found MSI: $($msiFile.FullName)"
+            Copy-Item $msiFile.FullName -Destination ./output/
+          } else {
+            Write-Host "MSI not found. Listing files for debugging:"
+            Get-ChildItem -Path . -Recurse
+            exit 1
+          }
+        shell: pwsh
+
+      - name: Upload MSI Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.inputs.app_name }}-windows-msi
+          path: ./output/*.msi
