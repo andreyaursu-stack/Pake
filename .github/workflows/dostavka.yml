@@ -1,0 +1,81 @@
+name: Build Pake App (Windows MSI)
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_url:
+        description: 'URL веб-приложения для упаковки'
+        required: true
+        default: 'https://dostavka.yandex.ru/account/cargo'
+      app_name:
+        description: 'Название приложения (латиницей, без пробелов)'
+        required: true
+        default: 'DostavkaYandex'
+      window_width:
+        description: 'Ширина окна (по умолчанию 1280)'
+        required: false
+        default: '1280'
+      window_height:
+        description: 'Высота окна (по умолчанию 800)'
+        required: false
+        default: '800'
+      fullscreen:
+        description: 'Запускать в полноэкранном режиме'
+        type: boolean
+        default: false
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Rust
+        run: |
+          rustup set profile minimal
+          rustup target add x86_64-pc-windows-msvc
+          rustup component add rust-src
+        shell: pwsh
+
+      - name: Install Pake CLI
+        run: npm install -g pake-cli
+        shell: pwsh
+
+      - name: Build application
+        run: |
+          $args = @(
+            "${{ github.event.inputs.app_url }}",
+            "--name", "${{ github.event.inputs.app_name }}",
+            "--width", "${{ github.event.inputs.window_width }}",
+            "--height", "${{ github.event.inputs.window_height }}"
+          )
+          if ("${{ github.event.inputs.fullscreen }}" -eq "true") {
+            $args += "--fullscreen"
+          }
+          pake @args
+        shell: pwsh
+
+      - name: Debug - Find all MSI files
+        run: |
+          Write-Host "=== Searching for MSI files ==="
+          Get-ChildItem -Path . -Filter "*.msi" -Recurse | ForEach-Object {
+            Write-Host "Found MSI: $($_.FullName)"
+          }
+          Write-Host "=== Current directory contents ==="
+          Get-ChildItem -Path . -Recurse | Select-Object FullName, Length | Format-Table -AutoSize
+        shell: pwsh
+
+      - name: Upload MSI Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.inputs.app_name }}-windows-msi
+          path: |
+            ./**/*.msi
+            ./${{ github.event.inputs.app_name }}_*.msi
